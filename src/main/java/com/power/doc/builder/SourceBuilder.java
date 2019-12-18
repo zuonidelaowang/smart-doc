@@ -14,6 +14,7 @@ import com.power.doc.utils.DocUtil;
 import com.thoughtworks.qdox.JavaProjectBuilder;
 import com.thoughtworks.qdox.model.*;
 import com.thoughtworks.qdox.model.expression.AnnotationValue;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.util.*;
@@ -186,7 +187,7 @@ public class SourceBuilder {
                 apiNoteValue = method.getComment();
             }
             String authorValue = DocUtil.getNormalTagComments(method, DocTags.AUTHOR, cls.getName());
-            if(this.isShowAuthor && StringUtil.isNotEmpty(authorValue)){
+            if (this.isShowAuthor && StringUtil.isNotEmpty(authorValue)) {
                 apiMethodDoc.setAuthor(authorValue);
             }
             apiMethodDoc.setDetail(apiNoteValue);
@@ -1106,7 +1107,6 @@ public class SourceBuilder {
             return null;
         }
         List<ApiParam> paramList = new ArrayList<>();
-        int requestBodyCounter = 0;
         List<ApiParam> reqBodyParamsList = new ArrayList<>();
         out:
         for (JavaParameter parameter : parameterList) {
@@ -1172,11 +1172,8 @@ public class SourceBuilder {
                         required = annotationRequired.toString();
                     }
                     String annotationName = annotation.getType().getName();
-                    if (REQUEST_BODY.equals(annotationName) || (VALID.equals(annotationName) && annotations.size() == 1)) {
-                        if (requestBodyCounter > 0) {
-                            throw new RuntimeException("You have use @RequestBody Passing multiple variables  for method "
-                                    + javaMethod.getName() + " in " + className + ",@RequestBody annotation could only bind one variables.");
-                        }
+
+                    if (REQUEST_BODY.equals(annotationName) || VALID.equals(annotationName)) {
                         if (DocClassUtil.isPrimitive(fullTypeName)) {
                             ApiParam bodyParam = ApiParam.of()
                                     .setField(paramName).setType(DocClassUtil.processTypeNameForParams(simpleName))
@@ -1211,37 +1208,21 @@ public class SourceBuilder {
                                 reqBodyParamsList.addAll(buildParams(typeName, "", 0, "true", responseFieldMap, false, new HashMap<>()));
                             }
                         }
-                        requestBodyCounter++;
                     } else {
-                        if (REQUEST_PARAM.equals(annotationName) ||
-                                DocAnnotationConstants.SHORT_PATH_VARIABLE.equals(annotationName)) {
-                            AnnotationValue annotationValue = annotation.getProperty(DocAnnotationConstants.VALUE_PROP);
-                            if (null != annotationValue) {
-                                paramName = StringUtil.removeQuotes(annotationValue.toString());
-                            }
-                            AnnotationValue annotationOfName = annotation.getProperty(DocAnnotationConstants.NAME_PROP);
-                            if (null != annotationOfName) {
-                                paramName = StringUtil.removeQuotes(annotationOfName.toString());
-                            }
-
-                            ApiParam param = ApiParam.of().setField(paramName)
-                                    .setType(DocClassUtil.processTypeNameForParams(simpleName))
-                                    .setDesc(comment).setRequired(Boolean.valueOf(required)).setVersion(DocGlobalConstants.DEFAULT_VERSION);
-                            paramList.add(param);
-                        } else {
-                            continue;
-                        }
+                        ApiParam param = ApiParam.of().setField(paramName)
+                                .setType(DocClassUtil.processTypeNameForParams(simpleName))
+                                .setDesc(comment).setRequired(Boolean.valueOf(required)).setVersion(DocGlobalConstants.DEFAULT_VERSION);
+                        paramList.add(param);
                     }
                 }
             }
         }
-        if (requestBodyCounter > 0) {
+
+        if (reqBodyParamsList.size() != 0) {
             paramList.addAll(reqBodyParamsList);
-            return paramList;
         }
-        return paramList;
 
-
+        return paramList.stream().distinct().collect(Collectors.toList());
     }
 
     private JavaClass getJavaClass(String simpleName) {
